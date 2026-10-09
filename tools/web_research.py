@@ -80,7 +80,7 @@ def route_question(text):
                          or re.fullmatch(r'[\d\s+*/().×÷−-]+[=?？]?', text)):
         return {'kind':'direct', 'limit':0, 'fresh':False}
     if re.search(r'深入|深度|详细研究|系统研究|全面分析|研究报告|文献综述|调研报告|复杂研究|deep research|comprehensive|literature review', text):
-        return {'kind':'research', 'limit':16, 'fresh':bool(explicit)}
+        return {'kind':'research', 'limit':16, 'fresh':bool(re.search(r'最新|新闻|今天|最近|实时|latest|news|today',text))}
     if re.search(r'最新|新闻|消息|今天|最近|当前|实时|对比|比较|区别|哪个好|优劣|性价比| vs\.? |latest|news|compare|comparison', text):
         return {'kind':'comparison', 'limit':6, 'fresh':bool(re.search(r'最新|新闻|今天|最近|实时|latest|news|today', text))}
     return {'kind':'simple', 'limit':3, 'fresh':False}

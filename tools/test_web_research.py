@@ -54,6 +54,10 @@ class ResearchTests(unittest.TestCase):
                             ('深入研究大模型部署并优先官方来源',16),('联网搜索你是什么模型',3)]:
             self.assertEqual(research.route_question(text)['limit'],count,text)
 
+    def test_requesting_sources_alone_does_not_force_fresh_fetches(self):
+        self.assertFalse(research.route_question('深入研究 Ubuntu 安装方法，优先官方来源')['fresh'])
+        self.assertTrue(research.route_question('深入研究最新 Ubuntu 安装变化，优先官方来源')['fresh'])
+
     def test_sixteen_sources_are_unique_and_within_context_budget(self):
         docs=[{'url':f'https://example.com/{i}','content':'正文资料'*3000} for i in range(20)]
         result=research.read_documents({'documents':docs+[docs[0]]},16,24000)
