@@ -1,0 +1,63 @@
+{
+  "model": "qwen3.8-27b",
+  "base": "https://letdown-riverboat-flatware.ngrok-free.dev",
+  "overlap_seconds": 8.923800000190734,
+  "results": [
+    {
+      "id": 1,
+      "first": 5.559199999809265,
+      "last": 15.241599999904633,
+      "timings": {
+        "predicted_ms": 10585.665781000002,
+        "predicted_n": 500,
+        "predicted_per_second": 47.23368471517776,
+        "prompt_ms": 111.524959,
+        "prompt_n": 44,
+        "prompt_per_second": 394.5305193970078,
+        "ttft_ms": 376.08164700000003
+      }
+    },
+    {
+      "id": 2,
+      "first": 4.0808000001907345,
+      "last": 15.240800000190735,
+      "timings": {
+        "predicted_ms": 10585.961978,
+        "predicted_n": 500,
+        "predicted_per_second": 47.232363108720016,
+        "prompt_ms": 110.50974500000001,
+        "prompt_n": 44,
+        "prompt_per_second": 398.15493194740424,
+        "ttft_ms": 334.60277499999995
+      }
+    },
+    {
+      "id": 3,
+      "first": 3.617699999809265,
+      "last": 14.483,
+      "timings": {
+        "predicted_ms": 10515.54770200001,
+        "predicted_n": 500,
+        "predicted_per_second": 47.548640752673506,
+        "prompt_ms": 122.223053,
+        "prompt_n": 44,
+        "prompt_per_second": 359.9975529984511,
+        "ttft_ms": 125.78849399999997
+      }
+    },
+    {
+      "id": 4,
+      "first": 4.9625,
+      "last": 15.241900000095367,
+      "timings": {
+        "predicted_ms": 10584.678788,
+        "predicted_n": 500,
+        "predicted_per_second": 47.23808913000337,
+        "prompt_ms": 110.64022100000001,
+        "prompt_n": 44,
+        "prompt_per_second": 397.68539507888363,
+        "ttft_ms": 430.583972
+      }
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "base_url": "http://127.0.0.1:8080",
+  "model": "qwen3.8-27b",
+  "concurrency": 4,
+  "overlap_seconds": 10.473532303236425,
+  "gpu_peak_mib": 20712,
+  "results": [
+    {
+      "request": 1,
+      "first_content_s": 0.21160051692277193,
+      "last_content_s": 10.881555323954672,
+      "timings": {
+        "cache_n": 37,
+        "predicted_ms": 10568.87577599999,
+        "predicted_n": 497,
+        "predicted_per_second": 47.02486910940872,
+        "prompt_ms": 37.108424,
+        "prompt_n": 41,
+        "prompt_per_second": 1104.870419719253,
+        "ttft_ms": 209.09244999999999
+      },
+      "usage": {
+        "completion_tokens": 497,
+        "prompt_tokens": 41,
+        "total_tokens": 538
+      }
+    },
+    {
+      "request": 2,
+      "first_content_s": 0.3652969356626272,
+      "last_content_s": 10.922111338935792,
+      "timings": {
+        "predicted_ms": 10565.198159999994,
+        "predicted_n": 497,
+        "predicted_per_second": 47.041237890042595,
+        "prompt_ms": 110.41198299999999,
+        "prompt_n": 41,
+        "prompt_per_second": 371.3365061109355,
+        "ttft_ms": 362.917875
+      },
+      "usage": {
+        "completion_tokens": 497,
+        "prompt_tokens": 41,
+        "total_tokens": 538
+      }
+    },
+    {
+      "request": 3,
+      "first_content_s": 0.15354117471724749,
+      "last_content_s": 10.859873967710882,
+      "timings": {
+        "cache_n": 37,
+        "predicted_ms": 10568.984936999988,
+        "predicted_n": 497,
+        "predicted_per_second": 47.024383416433714,
+        "prompt_ms": 35.704145,
+        "prompt_n": 41,
+        "prompt_per_second": 1148.3260557002554,
+        "ttft_ms": 151.139154
+      },
+      "usage": {
+        "completion_tokens": 497,
+        "prompt_tokens": 41,
+        "total_tokens": 538
+      }
+    },
+    {
+      "request": 4,
+      "first_content_s": 0.09762570401653647,
+      "last_content_s": 10.838829238899052,
+      "timings": {
+        "cache_n": 37,
+        "predicted_ms": 10567.70343999999,
+        "predicted_n": 497,
+        "predicted_per_second": 47.03008584805636,
+        "prompt_ms": 37.024927,
+        "prompt_n": 41,
+        "prompt_per_second": 1107.3620752851182,
+        "ttft_ms": 95.022641
+      },
+      "usage": {
+        "completion_tokens": 497,
+        "prompt_tokens": 41,
+        "total_tokens": 538
+      }
+    }
+  ]
+}

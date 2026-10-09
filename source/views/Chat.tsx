@@ -1,23 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { readChatStream } from '../lib/chat-stream'
 import '../styles/chat.css'
+import { useChatHistory } from '../lib/use-chat-history'
+import type { Message } from '../lib/chat-history'
 
 function apiHeaders(apiBase: string): Record<string, string> {
-  return new URL(apiBase).hostname.includes('.ngrok')
-    ? { 'ngrok-skip-browser-warning': '1' }
-    : { 'X-Pinggy-No-Screen': '1' }
+  const hostname = new URL(apiBase).hostname
+  if (hostname.includes('.ngrok')) return { 'ngrok-skip-browser-warning': '1' }
+  if (hostname.includes('pinggy')) return { 'X-Pinggy-No-Screen': '1' }
+  return {}
 }
 
 type Card = { id: string; modalities?: { vision?: boolean }; supported_endpoints?: string[] }
-type Message = { id: string; role: 'user' | 'assistant'; text: string; image?: string }
 
-export function Chat({ apiBase }: { apiBase: string }) {
+export function Chat({ apiBase = window.location.origin }: { apiBase?: string } = {}) {
   const [models, setModels] = useState<Card[]>([])
-  const [model, setModel] = useState('')
-  const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [image, setImage] = useState<string>()
   const [busy, setBusy] = useState(false)
+  const history = useChatHistory(busy)
+  const { messages, model, setMessages, setModel } = history
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('正在连接模型…')
@@ -27,6 +29,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
   const vision = models.find(item => item.id === model)?.modalities?.vision === true
 
   useEffect(() => {
+    if (!history.ready) return
     const controller = new AbortController()
     void fetch(`${apiBase}/v1/models`, { signal: controller.signal, headers: apiHeaders(apiBase) }).then(async response => {
       if (!response.ok) throw new Error(`模型列表请求失败：HTTP ${response.status}`)
@@ -34,10 +37,10 @@ export function Chat({ apiBase }: { apiBase: string }) {
       const cards: Card[] = (payload.data ?? []).filter((item: Card) =>
         !item.supported_endpoints || item.supported_endpoints.includes('/v1/chat/completions'))
       if (!cards.length) throw new Error('服务没有返回聊天模型')
-      setModels(cards); setModel(cards[0].id); setStatus('已连接，可以开始对话')
+      setModels(cards); setModel(current => cards.some(card => card.id === current) ? current : cards[0].id); setStatus('已连接，可以开始对话')
     }).catch(cause => { if (!controller.signal.aborted) setError(String(cause.message ?? cause)) })
     return () => controller.abort()
-  }, [apiBase])
+  }, [apiBase, history.ready])
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [messages])
   useEffect(() => () => abort.current?.abort(), [])
 
@@ -111,16 +114,24 @@ export function Chat({ apiBase }: { apiBase: string }) {
     }
   }
 
+  if (!history.ready) return <main className="chat-page"><p role="status">正在恢复对话记录…</p></main>
+
   return <main className="chat-page">
     <header className="chat-heading">
-      <div><h1>和模型聊一聊</h1><p>中文对话、代码和图片理解</p></div>
+      <div><h1>和模型聊一聊</h1><p>中文对话、代码和图片理解 · 历史自动保存在此浏览器</p></div>
       <div className="chat-controls">
         <select aria-label="选择聊天模型" value={model} disabled={busy || messages.length > 0} onChange={event => setModel(event.target.value)}>
           {models.map(item => <option key={item.id} value={item.id}>{item.id}</option>)}
         </select>
-        <button className="button" disabled={busy || uploading} onClick={() => { setMessages([]); setImage(undefined); setError(''); setStatus('新对话') }}>新对话</button>
+        <button className="button" disabled={busy || uploading} onClick={() => { history.create(); setImage(undefined); setText(''); setError(''); setStatus('新对话') }}>新对话</button>
       </div>
     </header>
+    <div className="chat-saved"><label htmlFor="saved-chat">历史对话</label>
+      <select id="saved-chat" aria-label="历史对话" value={history.activeId} disabled={busy || uploading} onChange={event => {
+        history.select(event.target.value); setText(''); setImage(undefined); setError(''); setStatus('已恢复对话，可以继续追问')
+      }}>{history.threads.map(thread => <option key={thread.id} value={thread.id}>{thread.title}</option>)}</select>
+      <button className="button" disabled={busy || uploading} onClick={() => { void history.remove(); setImage(undefined); setText('') }}>删除此对话</button>
+    </div>
     <section className="chat-history" aria-label="对话记录" aria-live="polite">
       {!messages.length && <div className="chat-empty"><h2>你好，有什么想聊的？</h2><p>输入问题，或上传一张图片。</p>
         <div className="chat-suggestions">{['用中文介绍一下你自己', '写一个 Python 快速排序函数', '解释什么是大语言模型'].map(prompt =>
@@ -137,6 +148,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
       <div ref={bottom} />
     </section>
     <footer className="chat-composer">
+      {history.storageError && <p role="alert" className="chat-error">{history.storageError}</p>}
       {error && <p role="alert" className="chat-error">{error}</p>}
       {image && <div className="chat-attachment"><img src={image} alt="待发送的图片" /><button className="button" disabled={busy} onClick={() => setImage(undefined)}>移除图片</button></div>}
       <textarea aria-label="输入消息" placeholder="输入消息… Enter 发送，Shift+Enter 换行" value={text} disabled={busy} rows={3}

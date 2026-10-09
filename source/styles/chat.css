@@ -43,3 +43,7 @@
   .chat-composer { padding-top:8px; }
   .chat-composer textarea { height:70px; min-height:70px; padding:10px 14px; }
 }
+
+.chat-saved { display:flex; align-items:center; gap:10px; padding:0 8px 12px; flex-shrink:0; font-size:12px; color:var(--muted); }
+.chat-saved select { flex:1; min-width:0; max-width:480px; background:var(--panel); color:var(--text); border:1px solid var(--line); padding:8px; border-radius:8px; }
+@media(max-width:600px) { .chat-saved { gap:6px; } .chat-saved label { display:none; } }
