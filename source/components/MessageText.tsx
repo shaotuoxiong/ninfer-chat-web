@@ -1,6 +1,9 @@
 import { memo, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import rehypeHighlight from 'rehype-highlight'
 import type { PluggableList } from 'unified'
 import type { Root, RootContent } from 'mdast'
@@ -38,8 +41,11 @@ function CodeBlock({ node, children }: { node?: Element; children?: React.ReactN
     <button type="button" onClick={() => void copy()} aria-label="复制代码"><ChatIcon name="copy" />{error ? '请手动复制' : copied ? '已复制' : '复制代码'}</button></div>
     <pre>{children}</pre></div>
 }
-const remarkPlugins = [remarkGfm, remarkLineBreaks]
-const rehypePlugins: PluggableList = [[rehypeHighlight, { detect: false, ignoreMissing: true }]]
+const remarkPlugins = [remarkGfm, remarkMath, remarkLineBreaks]
+const rehypePlugins: PluggableList = [
+  [rehypeKatex, { trust: false, strict: 'ignore', maxSize: 10, maxExpand: 1000 }],
+  [rehypeHighlight, { detect: false, ignoreMissing: true }],
+]
 export const MessageText = memo(function MessageText({ text }: { text: string }) {
   return <div className="chat-markdown"><Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} skipHtml
     components={{

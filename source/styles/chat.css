@@ -170,3 +170,9 @@
 .chat-shell[data-theme='light'] .hljs-number,.chat-shell[data-theme='light'] .hljs-attr { color:#aa4b14; }
 .chat-shell[data-theme='light'] .hljs-title,.chat-shell[data-theme='light'] .hljs-built_in { color:#176b9c; }
 @media(max-width:840px) { .chat-text { font-size:15px; } .chat-heading-actions { gap:0; } .chat-markdown th,.chat-markdown td { min-width:140px; padding:9px 12px; } }
+
+/* Formula fonts are bundled with the site; long display math scrolls inside the answer. */
+.chat-markdown .katex { font-size:1.08em; color:inherit; }
+.chat-markdown .katex-display { display:block; max-width:100%; overflow-x:auto; overflow-y:hidden; padding:.3em 0; margin:1.1em 0; scrollbar-width:thin; }
+.chat-markdown .katex-display>.katex { display:block; width:max-content; min-width:100%; text-align:center; }
+.chat-markdown .katex-error { color:var(--danger); overflow-wrap:anywhere; white-space:pre-wrap; font:inherit; }

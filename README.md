@@ -117,3 +117,13 @@ GitHub Pages 跨域预检返回 204；中文 SSE 实测 60 个内容事件，首
 
 验证：TypeScript 通过；Markdown 标题/嵌套列表/表格换行与安全渲染、SSE 共 4 项测试通过。
 真实浏览器确认主题刷新保持、真实请求含系统提示、模型表格与 Python 代码高亮、代码复制、格式化历史恢复、手机布局。
+
+## 数学公式显示（2026-10-09）
+
+接入 remark-math 6.0.0、rehype-katex 7.0.1、KaTeX 0.16.47，版本与依赖已锁定。
+支持 `$...$` 行内公式和 `$$...$$` 独立公式，包括 π、分数、积分等；独立公式建议用单独的两行 `$$` 包围。
+KaTeX 样式与字体打包到本站 assets，不依赖外部字体 CDN；手机长公式在回答内部横向滚动。
+原始历史内容保持不变，刷新后旧回答中的公式重新渲染。代码中的公式源码保留原样。
+无效或尚未完整生成的公式会回退显示源码，不能执行不受信任的 TeX 链接或 HTML。
+TypeScript 与公式/Markdown/SSE 合计 6 项测试通过，真实模型公式、字体加载、历史恢复与手机显示验证通过。
+官方库说明：[remark-math](https://github.com/remarkjs/remark-math/tree/main/packages/remark-math)、[rehype-katex](https://github.com/remarkjs/remark-math/tree/main/packages/rehype-katex)。

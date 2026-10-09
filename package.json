@@ -14,11 +14,14 @@
   },
   "dependencies": {
     "echarts": "^6.1.0",
+    "katex": "0.16",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "10.1.0",
     "rehype-highlight": "7.0.2",
-    "remark-gfm": "4.0.1"
+    "rehype-katex": "7.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
