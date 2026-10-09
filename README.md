@@ -57,7 +57,7 @@ sg docker -c 'docker compose -f compose.public.yml up -d --force-recreate ngrok'
 沿用已有 `ninfer-4090:web-chat` Docker 镜像内的 Bun / Vite / React：
 
 ```bash
-sg docker -c 'docker run --rm -v /home/sim/models/ninfer-chat-web:/site -w /web ninfer-4090:web-chat sh -c "cp -r /site/source /web/pages-src && cp /site/tools/pages.vite.config.ts /web/pages.vite.config.ts && bunx tsc -p /web/pages-src/tsconfig.json && bun test /web/pages-src/lib/chat-stream.test.ts /web/pages-src/components/MessageText.test.tsx && bunx vite build --config /web/pages.vite.config.ts"'
+sg docker -c 'docker run --rm -v /home/sim/models/ninfer-chat-web:/site -w /web ninfer-4090:web-chat sh -c "rm -rf /web/pages-src && cp -r /site/source /web/pages-src && cp /site/tools/pages.vite.config.ts /web/pages.vite.config.ts && bunx tsc -p /web/pages-src/tsconfig.json && bun test /web/pages-src/lib/chat-stream.test.ts /web/pages-src/components/MessageText.test.tsx && bunx vite build --config /web/pages.vite.config.ts"'
 cp build/index.html index.html
 cp -r build/assets .
 ```
@@ -127,3 +127,43 @@ KaTeX 样式与字体打包到本站 assets，不依赖外部字体 CDN；手机
 无效或尚未完整生成的公式会回退显示源码，不能执行不受信任的 TeX 链接或 HTML。
 TypeScript 与公式/Markdown/SSE 合计 6 项测试通过，真实模型公式、字体加载、历史恢复与手机显示验证通过。
 官方库说明：[remark-math](https://github.com/remarkjs/remark-math/tree/main/packages/remark-math)、[rehype-katex](https://github.com/remarkjs/remark-math/tree/main/packages/rehype-katex)。
+
+## 自动联网回答：free-search-mcp（2026-10-09）
+
+已安装视频推荐的 free-search-mcp 0.13.1，源仓库 https://github.com/sweetcornna/free-search-mcp，commit `e4bf2342d68cf3e4aa05801f363c88695f944dbf`。
+使用项目官方 Dockerfile、uv.lock 和 Chromium，容器 Python 3.12.15、MCP SDK 2.2.0、Playwright Chromium 145.0.7632.6。
+基础 Python 镜像 digest `05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f`；构建 uv 镜像 digest `3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a`。
+不需要注册或 API Key，不修改宿主 CUDA、Conda、PyTorch 或 Codex 配置。
+
+网页每次提问自动调用 `/v1/research/chat/completions`：多引擎搜索 → 读取最多 3 篇正文 → 将资料交给 Qwen → 流式回答并显示来源。没有联网开关。
+本机 `/chat` 通过 127.0.0.1:8081 网关访问此流程；GitHub 页面沿用固定 ngrok 域名。原始模型 API 仍供直接推理使用。
+“已读取的资料”可展开查看真实来源；来源与回答一同保存至浏览器。搜索摘要不算已读取的正文。搜索失败或正文无法读取时明确报错，不伪造联网成功。
+每篇正文最多传入 6,000 字符，模型可能存在引用或理解错误，重要结论仍需核实原文。
+MCP 最长等待 150 秒；首次联网实测约 24 秒，缓存和网络状况会影响耗时，页面速度中的首 Token 是模型推理计时，不包含搜索时间。
+
+搜索服务只监听 `127.0.0.1:8090/mcp`，未开放公网。网关仅转发规定的模型及聊天接口，不公开 MCP 通用工具。
+持久缓存卷 `ninfer-chat-public_ninfer-search-cache`；缓存搜索及正文最多沿用 1 小时，来源读取时间一并交给模型。
+保留上游 SSRF 防护，使用默认 Fake-IP 自动检测，未开启 private-host 或本地文件读取。网页资料只作为事实材料，不作为可执行指令。
+
+重新构建搜索服务：
+
+```bash
+git clone https://github.com/sweetcornna/free-search-mcp.git .search-mcp-src
+git -C .search-mcp-src checkout e4bf2342d68cf3e4aa05801f363c88695f944dbf
+sg docker -c 'docker build --network host --tag ninfer-free-search:0.13.1 .search-mcp-src'
+sg docker -c 'docker compose -f compose.public.yml up -d'
+```
+
+单独停止/启动搜索服务：
+
+```bash
+sg docker -c 'docker compose -f compose.public.yml stop search-mcp'
+sg docker -c 'docker compose -f compose.public.yml up -d search-mcp'
+```
+
+验证：MCP 真实搜索返回 Ubuntu 生命周期、官方桌面下载及发行目录，并成功读取 3 篇正文；中文 Qwen 问答返回来源。
+日志确认 Bing 不相关结果被识别并丢弃。网关资料注入、失败处理与图片历史保留的 3 项测试通过；前端 Markdown/公式/SSE 共 6 项通过。
+首次网关重建后测试触发启动时连接拒绝，服务就绪后重试通过。免费引擎仍可能限流或验证，不保证每次都能检索成功。
+
+本次采样：搜索容器约 259.5 MiB 系统内存，网关约 22.25 MiB；均未分配 GPU。浏览器缓存命中问答约 8 秒，不代表所有查询速度。
+图片仍只交给本机模型；搜索引擎接收用户的文字问题，不上传图片或额外提取图片内容用于检索。

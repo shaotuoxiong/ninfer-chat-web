@@ -20,6 +20,7 @@ type Card = { id: string; modalities?: { vision?: boolean }; supported_endpoints
 
 export function Chat({ apiBase = window.location.origin }: { apiBase?: string } = {}) {
   const { theme, toggleTheme } = useChatTheme()
+  const researchBase = ['127.0.0.1', 'localhost'].includes(new URL(apiBase).hostname) && new URL(apiBase).port === '8080' ? `${new URL(apiBase).protocol}//${new URL(apiBase).hostname}:8081` : apiBase
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 841px)').matches)
   const followOutput = useRef(true)
   const [models, setModels] = useState<Card[]>([])
@@ -84,14 +85,14 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
     const assistant: Message = { id: crypto.randomUUID(), role: 'assistant', text: '' }
     const history = [...messages.filter(item => item.text || item.image), user]
     setMessages([...history, assistant]); setText(''); setImage(undefined)
-    setBusy(true); setError(''); setStatus('正在生成…')
+    setBusy(true); setError(''); setStatus('正在搜索相关资料…')
     const controller = new AbortController(); abort.current = controller
     let answer = ''
     let finished = false
     let timing: any
     try {
-      const response = await fetch(`${apiBase}/v1/chat/completions`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders(apiBase) }, signal: controller.signal,
+      const response = await fetch(`${researchBase}/v1/research/chat/completions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders(researchBase) }, signal: controller.signal,
         body: JSON.stringify({ model, stream: true, stream_options: { include_usage: true },
           enable_thinking: false, max_tokens: 2048,
           messages: [{ role: 'system', content: CHAT_SYSTEM_PROMPT }, ...history.map(item => ({ role: item.role, content: item.image ? [
@@ -106,6 +107,11 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
       }
       if (!response.body) throw new Error('浏览器未收到输出流')
       await readChatStream(response.body, chunk => {
+        if (chunk.research) {
+          const info = chunk.research
+          setStatus(info.stage === 'searching' ? '正在搜索相关资料…' : info.stage === 'reading' ? `正在读取 ${info.count} 篇网页…` : `已读取 ${info.sources?.length ?? 0} 篇资料，正在生成回答…`)
+          if (Array.isArray(info.sources)) setMessages(current => current.map(item => item.id === assistant.id ? { ...item, sources: info.sources } : item))
+        }
         const choice = chunk.choices?.[0]
         if (choice?.delta?.content) {
           answer += choice.delta.content
@@ -118,7 +124,7 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
         if (chunk.timings) timing = chunk.timings
       })
       if (!finished) throw new Error('连接提前结束，回答可能不完整')
-      setStatus(timing ? `完成 · 首 Token ${Math.round(timing.ttft_ms)} ms · ${Number(timing.predicted_per_second).toFixed(1)} tokens/s` : '回答完成')
+      setStatus(timing ? `完成 · 模型首 Token ${Math.round(timing.ttft_ms)} ms · ${Number(timing.predicted_per_second).toFixed(1)} tokens/s` : '回答完成')
     } catch (cause) {
       if (controller.signal.aborted) setStatus('已停止生成')
       else { setError(cause instanceof Error ? cause.message : String(cause)); setStatus('生成失败') }
@@ -163,7 +169,8 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
           {messages.map(item => <article key={item.id} className={`chat-message chat-message--${item.role}`}>
             <span className="chat-role">{item.role === 'user' ? '你' : 'Qwen'}</span>
             {item.image && <img className="chat-image" src={item.image} alt="发送给模型的图片" />}
-            <div className="chat-text">{item.text ? item.role === 'assistant' ? <MessageText text={item.text} /> : item.text : <span className="chat-thinking">正在思考…</span>}</div>
+            <div className="chat-text">{item.text ? item.role === 'assistant' ? <MessageText text={item.text} /> : item.text : <span className="chat-thinking">{status}</span>}</div>
+            {item.role === 'assistant' && item.sources?.length && <details className="chat-sources"><summary>已读取的资料 · {item.sources.length} 篇</summary><ol>{item.sources.map((source, index) => <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title || `来源 ${index + 1}`}</a></li>)}</ol></details>}
             {item.role === 'assistant' && item.text && <button className="chat-copy icon-button" aria-label="复制回答" title="复制回答" onClick={() => {
               void navigator.clipboard.writeText(item.text).then(() => setStatus('回答已复制')).catch(() => setError('复制失败，请手动选择文本复制'))
             }}><ChatIcon name="copy" /></button>}

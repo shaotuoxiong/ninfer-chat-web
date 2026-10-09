@@ -7,7 +7,12 @@ services:
     network_mode: host
     volumes:
       - ./tools/local_gateway.py:/app/local_gateway.py:ro
-    command: [python, -u, /app/local_gateway.py]
+      - ./tools/research_gateway.py:/app/research_gateway.py:ro
+      - ./tools/web_research.py:/app/web_research.py:ro
+    depends_on:
+      search-mcp:
+        condition: service_started
+    command: [python, -u, /app/research_gateway.py]
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/v1/models', timeout=3).close()"]
       interval: 10s
@@ -23,3 +28,18 @@ services:
       gateway:
         condition: service_healthy
     command: [http, "http://127.0.0.1:8081", --url, "https://letdown-riverboat-flatware.ngrok-free.dev", --log, stdout, --log-format, json]
+  search-mcp:
+    image: ninfer-free-search:0.13.1
+    container_name: ninfer-free-search-mcp
+    restart: unless-stopped
+    network_mode: host
+    shm_size: 512mb
+    volumes:
+      - ninfer-search-cache:/data
+    environment:
+      SEARCH_MCP_MAX_CONTENT_CHARS: "18000"
+      SEARCH_MCP_BROWSER_POOL_SIZE: "2"
+      SEARCH_MCP_AGENT_BACKEND: "off"
+    command: [uv, run, --no-sync, search-mcp, --transport, streamable-http, --host, 127.0.0.1, --port, "8090"]
+volumes:
+  ninfer-search-cache:

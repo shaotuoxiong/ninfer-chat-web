@@ -1,4 +1,5 @@
-export type Message = { id: string; role: 'user' | 'assistant'; text: string; image?: string }
+export type Source = { title: string; url: string }
+export type Message = { id: string; role: 'user' | 'assistant'; text: string; image?: string; sources?: Source[] }
 export type Conversation = { id: string; model: string; title: string; customTitle?: boolean; messages: Message[]; updated: number }
 let database: Promise<IDBDatabase> | undefined
 function db() {

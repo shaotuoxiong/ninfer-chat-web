@@ -7,3 +7,5 @@ public-tunnel-known-hosts
 .gateway.pid
 
 .private/
+
+.search-mcp-src/
