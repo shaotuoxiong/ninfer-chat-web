@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { readChatStream } from '../lib/chat-stream'
+import { resumableChat } from '../lib/resumable-chat'
 import '../styles/chat.css'
 import { useChatHistory } from '../lib/use-chat-history'
 import { HistorySidebar } from '../components/HistorySidebar'
@@ -7,7 +7,7 @@ import { ChatIcon } from '../components/ChatIcon'
 import { MessageText } from '../components/MessageText'
 import { CHAT_SYSTEM_PROMPT } from '../lib/chat-prompt'
 import { useChatTheme } from '../lib/use-chat-theme'
-import type { Message } from '../lib/chat-history'
+import { savePendingGeneration, loadPendingGeneration, clearPendingGeneration, saveConversation, type PendingGeneration, type Message } from '../lib/chat-history'
 
 function apiHeaders(apiBase: string): Record<string, string> {
   const hostname = new URL(apiBase).hostname
@@ -33,6 +33,8 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
   const [error, setError] = useState('')
   const [status, setStatus] = useState('正在连接模型…')
   const abort = useRef<AbortController | null>(null)
+  const stopped = useRef(false)
+  const currentJob = useRef<PendingGeneration | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
   const picker = useRef<HTMLInputElement>(null)
   const composerInput = useRef<HTMLTextAreaElement>(null)
@@ -83,30 +85,37 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
     if (busy || uploading || !model || (!text.trim() && !image)) return
     const user: Message = { id: crypto.randomUUID(), role: 'user', text: text.trim() || '请描述这张图片。', image }
     const assistant: Message = { id: crypto.randomUUID(), role: 'assistant', text: '' }
-    const history = [...messages.filter(item => item.text || item.image), user]
-    setMessages([...history, assistant]); setText(''); setImage(undefined)
+    const dialogue = [...messages.filter(item => item.text || item.image), user]
+    setMessages([...dialogue, assistant]); setText(''); setImage(undefined)
+    const payload = { model, stream: true, request_id: assistant.id, stream_options: { include_usage: true },
+      enable_thinking: false, max_tokens: 2048,
+      messages: [{ role: 'system', content: CHAT_SYSTEM_PROMPT }, ...dialogue.map(item => ({ role: item.role, content: item.image ? [
+        { type: 'image_url', image_url: { url: item.image } }, { type: 'text', text: item.text },
+      ] : item.text }))] }
+    const pending = { key: `pending:${historyId()}`, payload, messages: [...dialogue, assistant], assistantId: assistant.id }
+    setBusy(true)
+    try {
+      await savePendingGeneration(pending)
+      const thread = historyThread()
+      await saveConversation({ ...thread, messages: pending.messages })
+      await runGeneration(pending)
+    } catch (cause) { setError(`保存生成任务失败：${String(cause)}`); setBusy(false) }
+  }
+
+  function historyId() { return history.activeId }
+  function historyThread() { return history.threads.find(thread => thread.id === history.activeId)! }
+
+  async function runGeneration(pending: PendingGeneration) {
+    currentJob.current = pending; stopped.current = false
     setBusy(true); setError(''); setStatus('正在判断是否需要联网…')
     const controller = new AbortController(); abort.current = controller
+    const assistant = { id: pending.assistantId }
     let answer = ''
     let finished = false
     let timing: any
     try {
-      const response = await fetch(`${researchBase}/v1/research/chat/completions`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders(researchBase) }, signal: controller.signal,
-        body: JSON.stringify({ model, stream: true, stream_options: { include_usage: true },
-          enable_thinking: false, max_tokens: 2048,
-          messages: [{ role: 'system', content: CHAT_SYSTEM_PROMPT }, ...history.map(item => ({ role: item.role, content: item.image ? [
-            { type: 'image_url', image_url: { url: item.image } },
-            { type: 'text', text: item.text },
-          ] : item.text }))],
-        }),
-      })
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        throw new Error(payload?.error?.message ?? `请求失败：HTTP ${response.status}`)
-      }
-      if (!response.body) throw new Error('浏览器未收到输出流')
-      await readChatStream(response.body, chunk => {
+      await resumableChat(`${researchBase}/v1/research/chat/completions`, pending.payload,
+        { 'Content-Type': 'application/json', ...apiHeaders(researchBase) }, controller.signal, chunk => {
         if (chunk.research) {
           const info = chunk.research
           setStatus(info.stage === 'deciding' ? '正在判断是否需要联网…' : info.stage === 'direct' ? '正在直接回答…' : info.stage === 'searching' ? `正在搜索相关资料（最多 ${info.target ?? 3} 篇）…` : info.stage === 'reading' ? `已读取 ${info.count} 篇，继续读取资料（最多 ${info.target ?? 3} 篇）…` : `已读取 ${info.sources?.length ?? 0} 篇资料，正在生成回答…`)
@@ -122,16 +131,43 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
           if (choice.finish_reason === 'length') setError('回答已达到输出长度限制，可以继续追问。')
         }
         if (chunk.timings) timing = chunk.timings
-      })
+      }, attempt => setStatus(`连接中断，正在重连（${attempt}）…后台继续生成`))
       if (!finished) throw new Error('连接提前结束，回答可能不完整')
+      await clearPendingGeneration(pending.key)
       setStatus(timing ? `完成 · 模型首 Token ${Math.round(timing.ttft_ms)} ms · ${Number(timing.predicted_per_second).toFixed(1)} tokens/s` : '回答完成')
     } catch (cause) {
       if (controller.signal.aborted) setStatus('已停止生成')
-      else { setError(cause instanceof Error ? cause.message : String(cause)); setStatus('生成失败') }
+      else {
+        if ((cause as any)?.serverError) await clearPendingGeneration(pending.key)
+        setError(cause instanceof Error ? cause.message : String(cause)); setStatus('生成失败')
+      }
     } finally {
-      abort.current = null; setBusy(false)
+      if (stopped.current) await clearPendingGeneration(pending.key)
+      abort.current = null; currentJob.current = null; setBusy(false)
       if (!answer) setMessages(current => current.filter(item => item.id !== assistant.id))
     }
+  }
+
+  useEffect(() => {
+    if (!history.ready || busy || abort.current) return
+    let cancelled = false
+    void loadPendingGeneration(`pending:${history.activeId}`).then(pending => {
+      if (!pending || cancelled || abort.current) return
+      // Replay from zero into an empty assistant message; no repeated text.
+      setMessages(pending.messages.map(item => item.id === pending.assistantId ? { ...item, text: '', sources: [] } : item))
+      void runGeneration(pending)
+    }).catch(cause => setError(`恢复任务失败：${String(cause)}`))
+    return () => { cancelled = true }
+  }, [history.ready, history.activeId])
+
+  function stopGeneration() {
+    stopped.current = true
+    const pending = currentJob.current
+    abort.current?.abort()
+    if (pending) void fetch(`${researchBase}/v1/research/cancel`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders(researchBase) },
+      body: JSON.stringify({ request_id: pending.payload.request_id }),
+    }).catch(() => setError('停止请求未送达；后台任务可能仍在生成。'))
   }
 
   function resetComposer() { setImage(undefined); setText(''); setError(''); followOutput.current = true }
@@ -192,7 +228,7 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
             <div><input ref={picker} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { void upload(event.target.files?.[0]); event.target.value = '' }} />
               <button className="icon-button chat-upload" aria-label="上传图片" title="上传图片" disabled={!vision || busy || uploading} onClick={() => picker.current?.click()}><ChatIcon name="attach" /></button>
               <span className="chat-hint">{uploading ? '读取图片中…' : vision ? '支持图片' : '文字对话'}</span></div>
-            {busy ? <button className="chat-stop icon-button" aria-label="停止生成" title="停止生成" onClick={() => abort.current?.abort()}><ChatIcon name="stop" /></button> :
+            {busy ? <button className="chat-stop icon-button" aria-label="停止生成" title="停止生成" onClick={stopGeneration}><ChatIcon name="stop" /></button> :
               <button className="chat-send icon-button" aria-label="发送消息" title="发送消息" disabled={!model || uploading || (!text.trim() && !image)} onClick={() => void send()}><ChatIcon name="send" /></button>}
           </div>
         </div>

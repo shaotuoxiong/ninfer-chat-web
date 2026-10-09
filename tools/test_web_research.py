@@ -69,7 +69,7 @@ class ResearchTests(unittest.TestCase):
     def test_search_prioritizes_official_and_replaces_failed_reads(self):
         candidates=[{'url':'https://example.com/blog'},{'url':'https://ubuntu.com/download'},
                     {'url':'https://example.com/failure'},{'url':'https://example.com/reserve'}]
-        def fake(name,args,progress=None):
+        def fake(name,args,progress=None,**kwargs):
             if name=='search': return {'results':candidates}
             if args['url'].endswith('failure'): return {'error':'captcha'}
             return {'url':args['url'],'content':'有效正文资料'*100}
@@ -77,5 +77,25 @@ class ResearchTests(unittest.TestCase):
             brief=research.gather_documents('Ubuntu',{'limit':3,'fresh':False},lambda e:None)
         self.assertEqual(brief['documents'][0]['url'],'https://ubuntu.com/download')
         self.assertEqual(len(brief['documents']),3)
+
+    def test_two_searches_and_eight_reads_really_overlap(self):
+        import threading
+        import time
+        searches=threading.Barrier(2)
+        reads=threading.Barrier(8)
+        active=0;maximum=0;guard=threading.Lock()
+        results=[{'url':f'https://example.com/{i}'} for i in range(16)]
+        def fake(name,args,progress=None,**kwargs):
+            nonlocal active,maximum
+            if name=='search': searches.wait(timeout=3); return {'results':results}
+            with guard: active+=1;maximum=max(maximum,active)
+            reads.wait(timeout=3)
+            time.sleep(.01)
+            with guard: active-=1
+            return {'url':args['url'],'content':'真实正文资料'*100}
+        with patch.object(research,'mcp_call',side_effect=fake):
+            brief=research.gather_documents('深入研究',{'limit':16,'fresh':False},lambda e:None)
+        self.assertEqual(len(brief['documents']),16)
+        self.assertEqual(maximum,8)
 
 if __name__=='__main__': unittest.main()

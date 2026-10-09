@@ -50,3 +50,31 @@ export async function deleteConversation(id: string) {
 export function newConversation(model = ''): Conversation {
   return { id: crypto.randomUUID(), model, title: '新对话', messages: [], updated: Date.now() }
 }
+
+export type PendingGeneration = { key: string; payload: any; messages: Message[]; assistantId: string }
+export async function savePendingGeneration(value: PendingGeneration) {
+  const database = await db()
+  const transaction = database.transaction('settings', 'readwrite')
+  const done = completed(transaction)
+  transaction.objectStore('settings').put(value)
+  await done
+}
+export async function loadPendingGeneration(key: string): Promise<PendingGeneration | undefined> {
+  const database = await db()
+  const transaction = database.transaction('settings', 'readonly')
+  const done = completed(transaction)
+  const request = transaction.objectStore('settings').get(key)
+  const value = await new Promise<PendingGeneration | undefined>((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  await done
+  return value
+}
+export async function clearPendingGeneration(key: string) {
+  const database = await db()
+  const transaction = database.transaction('settings', 'readwrite')
+  const done = completed(transaction)
+  transaction.objectStore('settings').delete(key)
+  await done
+}

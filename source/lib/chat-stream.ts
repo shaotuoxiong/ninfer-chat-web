@@ -17,7 +17,7 @@ export async function readChatStream(body: ReadableStream<Uint8Array>, onChunk: 
       .map(line => line.slice(5).trimStart()).join('\n')
     if (!data || data === '[DONE]') return
     const chunk = JSON.parse(data)
-    if (chunk.error) throw new Error(chunk.error.message ?? '服务返回错误')
+    if (chunk.error) throw Object.assign(new Error(chunk.error.message ?? '服务返回错误'), { serverError: true })
     onChunk(chunk)
   }
   try {

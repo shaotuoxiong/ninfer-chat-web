@@ -4,16 +4,20 @@ import urllib.request
 import urllib.error
 import uuid
 import re
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from urllib.parse import urlsplit
 from datetime import datetime, timezone
 
 MCP_URL = 'http://127.0.0.1:8090/mcp'
+READ_POOL = ThreadPoolExecutor(max_workers=8)
+SEARCH_POOL = ThreadPoolExecutor(max_workers=8)
 
 class ResearchError(Exception):
     pass
 
-def mcp_call(name, arguments, progress=None):
+def mcp_call(name, arguments, progress=None, timeout=150):
+    deadline = time.monotonic() + timeout
     headers = {'Content-Type':'application/json', 'Accept':'application/json, text/event-stream',
                'Mcp-Protocol-Version':'2025-11-25'}
     def post(method, params, notification=False):
@@ -22,7 +26,7 @@ def mcp_call(name, arguments, progress=None):
         if not notification: body['id'] = request_id
         req = urllib.request.Request(MCP_URL, data=json.dumps(body).encode(), headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=150) as response:
+            with urllib.request.urlopen(req, timeout=max(0.1, deadline-time.monotonic())) as response:
                 session = response.headers.get('Mcp-Session-Id')
                 if session: headers['Mcp-Session-Id'] = session
                 if notification: response.read(65536); return None
@@ -30,6 +34,7 @@ def mcp_call(name, arguments, progress=None):
                     return json.loads(response.read(8 * 1024 * 1024))
                 lines, total = [], 0
                 for raw in response:
+                    if time.monotonic() > deadline: raise ResearchError('网页读取超时')
                     total += len(raw)
                     if total > 8 * 1024 * 1024: raise ResearchError('搜索资料超过读取上限')
                     line = raw.decode('utf-8').rstrip('\r\n')
@@ -140,18 +145,22 @@ def usable_document(doc):
 def gather_documents(query, plan, notify):
     args = {'query':query, 'max_results':min(24, plan['limit']*2+4),
             'format':'json', 'max_age_hours':0 if plan['fresh'] else 1}
-    found = mcp_call('search', args)
-    candidates = found.get('results', [])
+    queries = [args]
     if plan['limit'] >= 6:
-        try:
-            domains = {'ubuntu':'ubuntu.com','python':'python.org','pytorch':'pytorch.org','qwen':'qwen.ai','nvidia':'nvidia.com','docker':'docker.com','ngrok':'ngrok.com','openai':'openai.com'}
-            official_domain = next((domain for term,domain in domains.items() if term in query.lower()), None)
-            official_args = {**args, 'query':query+' 官方文档 official documentation'}
-            if official_domain: official_args['include_domains'] = [official_domain]
-            official = mcp_call('search', official_args)
-            candidates = official.get('results', []) + candidates
-        except ResearchError:
-            pass  # Retain the successful main search.
+        domains = {'ubuntu':'ubuntu.com','python':'python.org','pytorch':'pytorch.org','qwen':'qwen.ai','nvidia':'nvidia.com','docker':'docker.com','ngrok':'ngrok.com','openai':'openai.com'}
+        official_domain = next((domain for term,domain in domains.items() if term in query.lower()), None)
+        official_args = {**args, 'query':query+' 官方文档 official documentation'}
+        if official_domain: official_args['include_domains'] = [official_domain]
+        queries.append(official_args)
+    searches = [SEARCH_POOL.submit(mcp_call,'search',q,timeout=18) for q in queries]
+    done, pending = wait(searches,timeout=20)
+    candidates=[]
+    # Official pass contributes first while both searches run concurrently.
+    for future in reversed(searches):
+        if future not in done: future.cancel();continue
+        try: candidates.extend(future.result().get('results',[]))
+        except ResearchError: pass
+    if not candidates: raise ResearchError('搜索失败或超时，请稍后重试。')
     unique = {}
     for item in candidates:
         if not isinstance(item,dict): continue
@@ -165,18 +174,32 @@ def gather_documents(query, plan, notify):
     def fetch(source):
         try:
             result = mcp_call('fetch', {'url':source['url'], 'format':'json',
-                                      'max_age_hours':0 if plan['fresh'] else 1})
+                                      'max_age_hours':0 if plan['fresh'] else 1}, timeout=12)
             return result if isinstance(result,dict) else {'error':'invalid document'}
         except ResearchError:
             return {'error':'unreadable'}
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        while remaining and len(documents) < plan['limit']:
-            batch = remaining[:min(4,plan['limit']-len(documents))]
-            remaining = remaining[len(batch):]
-            notify({'stage':'reading', 'count':len(documents), 'target':plan['limit']})
-            for source, doc in zip(batch, pool.map(fetch,batch)):
-                if usable_document(doc):
-                    documents.append(doc); sources.append(source)
+    deadline = time.monotonic() + (14 if plan['limit'] <= 6 else 22)
+    pending={}
+    rank={s['url']:i for i,s in enumerate(remaining)}
+    def refill():
+        while remaining and len(pending)<min(8,plan['limit']-len(documents)):
+            source=remaining.pop(0)
+            pending[READ_POOL.submit(fetch,source)]=source
+    refill()
+    while pending and len(documents)<plan['limit']:
+        done,_=wait(pending,timeout=max(0,deadline-time.monotonic()),return_when=FIRST_COMPLETED)
+        if not done: break
+        for future in done:
+            source=pending.pop(future)
+            doc=future.result()
+            if usable_document(doc): documents.append(doc);sources.append(source)
+        notify({'stage':'reading','count':len(documents),'target':plan['limit']})
+        if time.monotonic()>=deadline: break
+        refill()
+    for future in pending: future.cancel()
+    pairs=sorted(zip(sources,documents),key=lambda pair:rank.get(pair[0]['url'],999))
+    sources=[p[0] for p in pairs][:plan['limit']]
+    documents=[p[1] for p in pairs][:plan['limit']]
     return {'documents':documents, 'sources':sources}
 
 

@@ -9,6 +9,8 @@ services:
       - ./tools/local_gateway.py:/app/local_gateway.py:ro
       - ./tools/research_gateway.py:/app/research_gateway.py:ro
       - ./tools/web_research.py:/app/web_research.py:ro
+      - ./tools/generation_store.py:/app/generation_store.py:ro
+      - ninfer-generation-cache:/data
     depends_on:
       search-mcp:
         condition: service_started
@@ -40,6 +42,9 @@ services:
       SEARCH_MCP_MAX_CONTENT_CHARS: "18000"
       SEARCH_MCP_BROWSER_POOL_SIZE: "2"
       SEARCH_MCP_AGENT_BACKEND: "off"
+      SEARCH_MCP_REQUEST_TIMEOUT: "8"
+      SEARCH_MCP_FETCH_TIMEOUT: "10"
     command: [uv, run, --no-sync, search-mcp, --transport, streamable-http, --host, 127.0.0.1, --port, "8090"]
 volumes:
   ninfer-search-cache:
+  ninfer-generation-cache:
