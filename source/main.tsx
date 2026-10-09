@@ -22,7 +22,7 @@ function App() {
       setApiBase(url.origin); setInput(url.origin); setError('')
     } catch (cause) { setError(cause instanceof Error ? cause.message : '服务地址无效') }
   }
-  return <><nav className="site-bar"><strong>nInfer · Qwen</strong><span>RTX 4090 · 中文聊天</span>
+  return <><nav className="site-bar" aria-label="服务设置">
     <details><summary>服务设置</summary><div className="site-settings"><label htmlFor="api-base">推理服务地址</label>
       <input id="api-base" type="url" placeholder="https://…" value={input} onChange={e => setInput(e.target.value)} />
       <button className="button" onClick={connect}>连接服务</button>

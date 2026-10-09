@@ -57,7 +57,7 @@ export function useChatHistory(busy: boolean) {
     update(thread => {
       const messages = typeof value === 'function' ? value(thread.messages) : value
       return { ...thread, messages, updated: Date.now(),
-        title: messages.find(message => message.role === 'user')?.text.slice(0, 28) || '新对话' }
+        title: thread.customTitle ? thread.title : messages.find(message => message.role === 'user')?.text.slice(0, 28) || '新对话' }
     })
   }
   function setModel(value: SetStateAction<string>) {
@@ -69,16 +69,27 @@ export function useChatHistory(busy: boolean) {
     setThreads(current => [thread, ...current]); setActiveId(thread.id)
   }
   function select(id: string) { persist(); setActiveId(id) }
-  async function remove() {
-    const id = active.id
+  async function rename(id: string, title: string) {
+    if (!title.trim()) return
+    const existing = threads.find(thread => thread.id === id)
+    if (!existing) return
+    const renamed = { ...existing, title: title.trim(), customTitle: true }
+    try {
+      await saveConversation(renamed, false)
+      setThreads(current => current.map(thread => thread.id === id ? { ...thread, title: renamed.title, customTitle: true } : thread))
+    } catch (cause) { report(cause); throw cause }
+  }
+  async function remove(id = active.id) {
     deleting.current = id
     try {
       await deleteConversation(id)
       const remaining = threads.filter(thread => thread.id !== id)
-      const next = remaining[0] ?? newConversation(active.model)
-      setThreads(remaining.length ? remaining : [next]); setActiveId(next.id)
-    } catch (cause) { deleting.current = null; report(cause) }
+      if (id === active.id) {
+        const next = remaining[0] ?? newConversation(active.model)
+        setThreads(remaining.length ? remaining : [next]); setActiveId(next.id)
+      } else setThreads(remaining)
+    } catch (cause) { deleting.current = null; report(cause); throw cause }
   }
   return { ready, threads, activeId: active.id, messages: active.messages, model: active.model,
-    setMessages, setModel, create, select, remove, storageError }
+    setMessages, setModel, create, select, remove, rename, storageError }
 }

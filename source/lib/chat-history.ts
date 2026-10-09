@@ -1,5 +1,5 @@
 export type Message = { id: string; role: 'user' | 'assistant'; text: string; image?: string }
-export type Conversation = { id: string; model: string; title: string; messages: Message[]; updated: number }
+export type Conversation = { id: string; model: string; title: string; customTitle?: boolean; messages: Message[]; updated: number }
 let database: Promise<IDBDatabase> | undefined
 function db() {
   return database ??= new Promise<IDBDatabase>((resolve, reject) => {
@@ -29,14 +29,14 @@ export async function loadConversations() {
   await done
   return { conversations: conversations.result as Conversation[], activeId: active.result?.value as string | undefined }
 }
-export async function saveConversation(conversation: Conversation) {
+export async function saveConversation(conversation: Conversation, activate = true) {
   const database = await db()
   const transaction = database.transaction(['conversations', 'settings'], 'readwrite')
   const done = completed(transaction)
   // Empty placeholders are not answers and must not reappear after a reload.
   transaction.objectStore('conversations').put({ ...conversation,
     messages: conversation.messages.filter(message => message.text || message.image) })
-  transaction.objectStore('settings').put({ key: 'active', value: conversation.id })
+  if (activate) transaction.objectStore('settings').put({ key: 'active', value: conversation.id })
   await done
 }
 export async function deleteConversation(id: string) {
