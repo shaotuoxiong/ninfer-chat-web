@@ -13,7 +13,7 @@ class Gateway(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
             self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Pinggy-No-Screen')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Pinggy-No-Screen, ngrok-skip-browser-warning')
             self.send_header('Access-Control-Max-Age', '600')
 
     def do_OPTIONS(self):

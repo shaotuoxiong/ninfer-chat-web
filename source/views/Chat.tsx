@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { readChatStream } from '../lib/chat-stream'
 import '../styles/chat.css'
 
+function apiHeaders(apiBase: string): Record<string, string> {
+  return new URL(apiBase).hostname.includes('.ngrok')
+    ? { 'ngrok-skip-browser-warning': '1' }
+    : { 'X-Pinggy-No-Screen': '1' }
+}
+
 type Card = { id: string; modalities?: { vision?: boolean }; supported_endpoints?: string[] }
 type Message = { id: string; role: 'user' | 'assistant'; text: string; image?: string }
 
@@ -22,7 +28,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
 
   useEffect(() => {
     const controller = new AbortController()
-    void fetch(`${apiBase}/v1/models`, { signal: controller.signal, headers: { 'X-Pinggy-No-Screen': '1' } }).then(async response => {
+    void fetch(`${apiBase}/v1/models`, { signal: controller.signal, headers: apiHeaders(apiBase) }).then(async response => {
       if (!response.ok) throw new Error(`模型列表请求失败：HTTP ${response.status}`)
       const payload = await response.json()
       const cards: Card[] = (payload.data ?? []).filter((item: Card) =>
@@ -68,7 +74,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
     let timing: any
     try {
       const response = await fetch(`${apiBase}/v1/chat/completions`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': '1' }, signal: controller.signal,
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders(apiBase) }, signal: controller.signal,
         body: JSON.stringify({ model, stream: true, stream_options: { include_usage: true },
           enable_thinking: false, max_tokens: 2048,
           messages: history.map(item => ({ role: item.role, content: item.image ? [

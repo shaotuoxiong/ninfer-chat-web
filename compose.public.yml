@@ -1,0 +1,25 @@
+name: ninfer-chat-public
+services:
+  gateway:
+    image: python@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
+    container_name: ninfer-chat-gateway
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./tools/local_gateway.py:/app/local_gateway.py:ro
+    command: [python, -u, /app/local_gateway.py]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/v1/models', timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+  ngrok:
+    image: ngrok/ngrok@sha256:14d80d083e5b53145f416bbbd36238336c9de4016c43fd950eb2eb845670583b
+    container_name: ninfer-chat-ngrok
+    restart: unless-stopped
+    network_mode: host
+    env_file: .private/ngrok.env
+    depends_on:
+      gateway:
+        condition: service_healthy
+    command: [http, "http://127.0.0.1:8081", --url, "https://letdown-riverboat-flatware.ngrok-free.dev", --log, stdout, --log-format, json]

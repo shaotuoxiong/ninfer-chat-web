@@ -5,3 +5,5 @@ __pycache__/
 .public-tunnel.pid
 public-tunnel-known-hosts
 .gateway.pid
+
+.private/

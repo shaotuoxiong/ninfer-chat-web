@@ -26,7 +26,7 @@ function App() {
     <details><summary>服务设置</summary><div className="site-settings"><label htmlFor="api-base">推理服务地址</label>
       <input id="api-base" type="url" placeholder="https://…" value={input} onChange={e => setInput(e.target.value)} />
       <button className="button" onClick={connect}>连接服务</button>
-      <p>临时入口到期后，在这里填写新的服务地址。</p>{error && <p role="alert">{error}</p>}</div></details></nav>
+      <p>已使用固定推理入口；需要切换服务时可修改地址。</p>{error && <p role="alert">{error}</p>}</div></details></nav>
     {apiBase ? <Chat key={apiBase} apiBase={apiBase} /> : <section className="connect-card"><h1>欢迎使用 Qwen</h1>
       <p>正在读取服务地址；也可以在右上角“服务设置”中连接。</p><p role="alert">{error}</p></section>}
   </>
