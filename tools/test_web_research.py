@@ -10,10 +10,9 @@ class ResearchTests(unittest.TestCase):
         brief={'sources':[{'title':'Ubuntu官方','url':'https://ubuntu.com/download'}],
                'documents':[{'title':'Ubuntu官方','url':'https://ubuntu.com/download','content':'网页正文。'*100,'published_date':'2026-10-01'}]}
         events=[]
-        with patch.object(research,'mcp_call',return_value=brief) as call:
+        with patch.object(research,'decide_plan',return_value={'kind':'simple','limit':3,'fresh':False}), patch.object(research,'gather_documents',return_value=brief) as call:
             result=research.research_messages(payload,events.append)
-        self.assertEqual(call.call_args.args[0],'research')
-        self.assertTrue(call.call_args.args[1]['fetch'])
+        self.assertEqual(call.call_args.args[1]['limit'],3)
         self.assertEqual(result['messages'][-1],payload['messages'][-1])
         self.assertIn(brief['documents'][0]['content'],result['messages'][1]['content'])
         self.assertEqual(events[-1]['sources'],[{'title':'Ubuntu官方','url':'https://ubuntu.com/download'}])
@@ -22,13 +21,61 @@ class ResearchTests(unittest.TestCase):
     def test_search_snippets_and_failed_pages_are_not_read_sources(self):
         brief={'sources':[{'title':'摘要','url':'https://example.com','snippet':'搜索摘要。'*100}],
                'documents':[{'url':'https://example.com','error':'captcha'}]}
-        with patch.object(research,'mcp_call',return_value=brief):
+        with patch.object(research,'decide_plan',return_value={'kind':'simple','limit':3,'fresh':False}), patch.object(research,'gather_documents',return_value=brief):
             with self.assertRaisesRegex(research.ResearchError,'无法读取'):
                 research.research_messages({'messages':[{'role':'user','content':'问题'}]},lambda e:None)
 
     def test_mcp_failure_does_not_generate_answer(self):
-        with patch.object(research,'mcp_call',side_effect=research.ResearchError('搜索失败')):
+        with patch.object(research,'decide_plan',return_value={'kind':'simple','limit':3,'fresh':False}), patch.object(research,'mcp_call',side_effect=research.ResearchError('搜索失败')):
             with self.assertRaisesRegex(research.ResearchError,'搜索失败'):
                 research.research_messages({'messages':[{'role':'user','content':'问题'}]},lambda e:None)
+
+    def test_identity_never_calls_network(self):
+        with patch.object(research,'mcp_call') as call:
+            events=[]
+            result=research.research_messages({'messages':[{'role':'user','content':'你是什么模型？'}]},events.append)
+        call.assert_not_called()
+        self.assertEqual(events[-1]['stage'],'direct')
+        self.assertIn('qwen3.8-27b',result['messages'][0]['content'])
+
+    def test_local_model_routes_stable_knowledge_without_search(self):
+        response=unittest.mock.MagicMock()
+        # Build the wire response rather than relying on escaped fixture strings.
+        import json
+        response.__enter__.return_value.read.return_value=json.dumps({'choices':[{'message':{'content':json.dumps({'need_web':False,'kind':'simple'})}}]}).encode()
+        with patch.object(research.urllib.request,'urlopen',return_value=response) as local, patch.object(research,'mcp_call') as external:
+            self.assertEqual(research.decide_plan('什么是牛顿第一定律？')['limit'],0)
+        self.assertEqual(local.call_args.args[0].full_url,'http://127.0.0.1:8080/v1/chat/completions')
+        external.assert_not_called()
+
+    def test_depth_and_explicit_search_override(self):
+        for text, count in [('你是什么模型',0),('你好',0),('证明圆周率是无理数',0),
+                            ('Ubuntu安装方法',3),('最新消息',6),('RTX 4090 与 A100 对比',6),
+                            ('深入研究大模型部署并优先官方来源',16),('联网搜索你是什么模型',3)]:
+            self.assertEqual(research.route_question(text)['limit'],count,text)
+
+    def test_sixteen_sources_are_unique_and_within_context_budget(self):
+        docs=[{'url':f'https://example.com/{i}','content':'正文资料'*3000} for i in range(20)]
+        result=research.read_documents({'documents':docs+[docs[0]]},16,24000)
+        self.assertEqual(len(result),16)
+        self.assertLessEqual(sum(len(s['text']) for s in result),24000)
+        self.assertEqual(len({s['url'] for s in result}),16)
+
+    def test_captcha_pages_never_count_as_read_sources(self):
+        blocked=[{'title':'Client Challenge','url':'https://example.com/a','content':'challenge '*100},
+                 {'title':'请进行安全验证(Security Verification)','url':'https://example.com/b','content':'页面资料 '*100}]
+        self.assertEqual(research.read_documents({'documents':blocked},16),[])
+
+    def test_search_prioritizes_official_and_replaces_failed_reads(self):
+        candidates=[{'url':'https://example.com/blog'},{'url':'https://ubuntu.com/download'},
+                    {'url':'https://example.com/failure'},{'url':'https://example.com/reserve'}]
+        def fake(name,args,progress=None):
+            if name=='search': return {'results':candidates}
+            if args['url'].endswith('failure'): return {'error':'captcha'}
+            return {'url':args['url'],'content':'有效正文资料'*100}
+        with patch.object(research,'mcp_call',side_effect=fake):
+            brief=research.gather_documents('Ubuntu',{'limit':3,'fresh':False},lambda e:None)
+        self.assertEqual(brief['documents'][0]['url'],'https://ubuntu.com/download')
+        self.assertEqual(len(brief['documents']),3)
 
 if __name__=='__main__': unittest.main()

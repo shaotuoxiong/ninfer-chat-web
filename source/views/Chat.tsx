@@ -85,7 +85,7 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
     const assistant: Message = { id: crypto.randomUUID(), role: 'assistant', text: '' }
     const history = [...messages.filter(item => item.text || item.image), user]
     setMessages([...history, assistant]); setText(''); setImage(undefined)
-    setBusy(true); setError(''); setStatus('正在搜索相关资料…')
+    setBusy(true); setError(''); setStatus('正在判断是否需要联网…')
     const controller = new AbortController(); abort.current = controller
     let answer = ''
     let finished = false
@@ -109,7 +109,7 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
       await readChatStream(response.body, chunk => {
         if (chunk.research) {
           const info = chunk.research
-          setStatus(info.stage === 'searching' ? '正在搜索相关资料…' : info.stage === 'reading' ? `正在读取 ${info.count} 篇网页…` : `已读取 ${info.sources?.length ?? 0} 篇资料，正在生成回答…`)
+          setStatus(info.stage === 'deciding' ? '正在判断是否需要联网…' : info.stage === 'direct' ? '正在直接回答…' : info.stage === 'searching' ? `正在搜索相关资料（最多 ${info.target ?? 3} 篇）…` : info.stage === 'reading' ? `已读取 ${info.count} 篇，继续读取资料（最多 ${info.target ?? 3} 篇）…` : `已读取 ${info.sources?.length ?? 0} 篇资料，正在生成回答…`)
           if (Array.isArray(info.sources)) setMessages(current => current.map(item => item.id === assistant.id ? { ...item, sources: info.sources } : item))
         }
         const choice = chunk.choices?.[0]
