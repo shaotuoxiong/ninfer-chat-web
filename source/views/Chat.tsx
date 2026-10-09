@@ -5,6 +5,8 @@ import { useChatHistory } from '../lib/use-chat-history'
 import { HistorySidebar } from '../components/HistorySidebar'
 import { ChatIcon } from '../components/ChatIcon'
 import { MessageText } from '../components/MessageText'
+import { CHAT_SYSTEM_PROMPT } from '../lib/chat-prompt'
+import { useChatTheme } from '../lib/use-chat-theme'
 import type { Message } from '../lib/chat-history'
 
 function apiHeaders(apiBase: string): Record<string, string> {
@@ -17,6 +19,7 @@ function apiHeaders(apiBase: string): Record<string, string> {
 type Card = { id: string; modalities?: { vision?: boolean }; supported_endpoints?: string[] }
 
 export function Chat({ apiBase = window.location.origin }: { apiBase?: string } = {}) {
+  const { theme, toggleTheme } = useChatTheme()
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 841px)').matches)
   const followOutput = useRef(true)
   const [models, setModels] = useState<Card[]>([])
@@ -91,10 +94,10 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
         method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders(apiBase) }, signal: controller.signal,
         body: JSON.stringify({ model, stream: true, stream_options: { include_usage: true },
           enable_thinking: false, max_tokens: 2048,
-          messages: history.map(item => ({ role: item.role, content: item.image ? [
+          messages: [{ role: 'system', content: CHAT_SYSTEM_PROMPT }, ...history.map(item => ({ role: item.role, content: item.image ? [
             { type: 'image_url', image_url: { url: item.image } },
             { type: 'text', text: item.text },
-          ] : item.text })),
+          ] : item.text }))],
         }),
       })
       if (!response.ok) {
@@ -136,7 +139,7 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
   }
   if (!history.ready) return <main className="chat-loading"><p role="status">正在恢复对话记录…</p></main>
 
-  return <div className={`chat-shell ${sidebarOpen ? '' : 'sidebar-closed'}`}>
+  return <div data-theme={theme} className={`chat-shell ${sidebarOpen ? '' : 'sidebar-closed'}`}>
     <HistorySidebar threads={history.threads} activeId={history.activeId} open={sidebarOpen} busy={busy || uploading}
       onToggle={() => setSidebarOpen(value => !value)} onNew={createConversation} onSelect={selectConversation}
       onRename={history.rename} onDelete={async id => { await history.remove(id); if (id === history.activeId) resetComposer() }} />
@@ -147,7 +150,7 @@ export function Chat({ apiBase = window.location.origin }: { apiBase?: string } 
             {models.map(item => <option key={item.id} value={item.id}>{item.id}</option>)}
           </select></div>
         </div>
-        <span className="chat-connection"><span className={models.length ? 'connected-dot' : 'connecting-dot'} />{models.length ? '已连接' : '连接中'}</span>
+        <div className="chat-heading-actions"><button className="icon-button chat-theme-toggle" onClick={toggleTheme} aria-label={theme === 'light' ? '切换深色主题' : '切换浅色主题'} title={theme === 'light' ? '切换深色主题' : '切换浅色主题'}><ChatIcon name={theme === 'light' ? 'moon' : 'sun'} /></button><span className="chat-connection"><span className={models.length ? 'connected-dot' : 'connecting-dot'} />{models.length ? '已连接' : '连接中'}</span></div>
       </header>
       <section className="chat-history" aria-label="对话记录" aria-live="polite" onScroll={event => {
         const pane = event.currentTarget; followOutput.current = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 100

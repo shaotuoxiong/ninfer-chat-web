@@ -11,3 +11,11 @@
 .connect-card h1 { font-size:24px; }
 body { background:#212121; }
 @media(max-width:840px) { .site-bar { right:14px; top:14px; } }
+
+:root[data-chat-theme='light'] body { background:#fff; color:#252525; }
+:root[data-chat-theme='light'] .site-bar summary { color:#707070; border-color:#e2e2e2; }
+:root[data-chat-theme='light'] .site-bar summary:hover { background:#f4f4f4; color:#252525; }
+:root[data-chat-theme='light'] .site-settings { background:#fff; color:#252525; border-color:#e2e2e2; }
+:root[data-chat-theme='light'] .site-settings input { background:#f8f8f8; color:#252525; border-color:#ddd; }
+:root[data-chat-theme='light'] .site-settings p { color:#707070; }
+:root[data-chat-theme='light'] .site-settings .button { background:#252525; color:#fff; }

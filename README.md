@@ -57,7 +57,7 @@ sg docker -c 'docker compose -f compose.public.yml up -d --force-recreate ngrok'
 沿用已有 `ninfer-4090:web-chat` Docker 镜像内的 Bun / Vite / React：
 
 ```bash
-sg docker -c 'docker run --rm -v /home/sim/models/ninfer-chat-web:/site -w /web ninfer-4090:web-chat sh -c "cp -r /site/source /web/pages-src && cp /site/tools/pages.vite.config.ts /web/pages.vite.config.ts && bunx tsc -p /web/pages-src/tsconfig.json && bun test /web/pages-src/lib/chat-stream.test.ts && bunx vite build --config /web/pages.vite.config.ts"'
+sg docker -c 'docker run --rm -v /home/sim/models/ninfer-chat-web:/site -w /web ninfer-4090:web-chat sh -c "cp -r /site/source /web/pages-src && cp /site/tools/pages.vite.config.ts /web/pages.vite.config.ts && bunx tsc -p /web/pages-src/tsconfig.json && bun test /web/pages-src/lib/chat-stream.test.ts /web/pages-src/components/MessageText.test.tsx && bunx vite build --config /web/pages.vite.config.ts"'
 cp build/index.html index.html
 cp -r build/assets .
 ```
@@ -102,3 +102,18 @@ GitHub Pages 跨域预检返回 204；中文 SSE 实测 60 个内容事件，首
 
 真实浏览器测试通过：历史恢复后继续问答、名称刷新保持、搜索、图片恢复、手机抽屉、删除其他对话时保留当前对话、代码排版、流式显示及停止生成。
 模型仍为 4 并发，本次页面更新不修改推理参数。
+
+## Markdown、主题与回答风格（2026-10-09）
+
+默认浅色，顶部月亮/太阳按钮切换深色或浅色；主题保存在当前浏览器。
+使用 react-markdown 10.1.0、remark-gfm 4.0.1、rehype-highlight 7.0.2，依赖与版本锁记录在 package.json / bun.lock。
+支持标题、嵌套列表、引用、表格、任务列表、链接和代码高亮；代码块可单独复制，宽表格和代码块在手机上内部横向滚动。
+仅将普通 `<br>` 标签转换为安全换行，其他 HTML 不解析；代码中的 `<br>` 原样显示。
+参考库官方说明：[react-markdown](https://github.com/remarkjs/react-markdown)、[remark-gfm](https://github.com/remarkjs/remark-gfm)、[rehype-highlight](https://github.com/rehypejs/rehype-highlight)。
+
+每次聊天请求在历史消息前加入 source/lib/chat-prompt.ts 中的系统提示，默认简洁中文、减少无用铺垫，允许用户指定其他语言、格式或详细程度。
+该提示不写入聊天历史，不提供联网检索，也不保证模型绝不产生错误；访客仍应核实重要信息。
+历史数据库保持不变，旧回答重新按完整 Markdown 排版，原有文字和图片保留。模型保持 4 并发，未更改权重。
+
+验证：TypeScript 通过；Markdown 标题/嵌套列表/表格换行与安全渲染、SSE 共 4 项测试通过。
+真实浏览器确认主题刷新保持、真实请求含系统提示、模型表格与 Python 代码高亮、代码复制、格式化历史恢复、手机布局。
