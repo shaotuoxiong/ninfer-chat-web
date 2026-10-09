@@ -1,0 +1,4 @@
+Chat interface and SSE parser adapted from the local nInfer-4090 deployment.
+Upstream: https://github.com/tensorninja/ninfer-4090
+License: Apache-2.0.
+Modified for GitHub Pages, configurable API endpoints and cross-origin access.
